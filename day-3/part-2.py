@@ -1,5 +1,4 @@
 import re
-import numpy as np
 
 with open("day-3/input.txt", "r") as file:
     corrupted_memory = file.read()
