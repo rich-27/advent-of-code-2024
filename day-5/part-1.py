@@ -51,7 +51,7 @@ def does_not_overlap(page_rule: Page_Specification, update_spec: Page_Specificat
     )
 
 
-def check_update(update_to_print):
+def update_is_valid(update_to_print):
     return np.all(
         [
             does_not_overlap(
@@ -65,7 +65,7 @@ def check_update(update_to_print):
     )
 
 
-valid_updates = [update for update in updates_to_print if check_update(update)]
+valid_updates = [update for update in updates_to_print if update_is_valid(update)]
 
 middle_page_numbers = [update[update.size // 2] for update in valid_updates]
 
