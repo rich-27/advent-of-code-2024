@@ -39,10 +39,10 @@ updates_to_print = [
 ]
 
 
-def does_not_overlap(page_rule: Page_Specification, update_spec: Page_Specification):
-    return np.all(
+def rule_conflicts(page_rule: Page_Specification, update_spec: Page_Specification):
+    return np.any(
         [
-            len(np.intersect1d(update_values, rule_values)) == 0
+            len(np.intersect1d(update_values, rule_values)) > 0
             for update_values, rule_values in [
                 (update_spec.antecedent_pages, page_rule.subsequent_pages),
                 (update_spec.subsequent_pages, page_rule.antecedent_pages),
@@ -51,21 +51,20 @@ def does_not_overlap(page_rule: Page_Specification, update_spec: Page_Specificat
     )
 
 
-def update_is_valid(update_to_print):
-    return np.all(
-        [
-            does_not_overlap(
-                rule_lookup[page_no],
-                Page_Specification(
-                    update_to_print[:page_index], update_to_print[page_index + 1 :]
-                ),
-            )
-            for page_index, page_no in enumerate(update_to_print)
-        ]
-    )
+def get_conflicts(update_to_print):
+    return [
+        page_index
+        for page_index, page_no in enumerate(update_to_print)
+        if rule_conflicts(
+            rule_lookup[page_no],
+            Page_Specification(
+                update_to_print[:page_index], update_to_print[page_index + 1 :]
+            ),
+        )
+    ]
 
 
-valid_updates = [update for update in updates_to_print if update_is_valid(update)]
+valid_updates = [update for update in updates_to_print if len(get_conflicts(update)) == 0]
 
 middle_page_numbers = [update[update.size // 2] for update in valid_updates]
 
