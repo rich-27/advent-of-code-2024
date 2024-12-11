@@ -5,6 +5,7 @@ stones = Counter(np.genfromtxt("day-11/input.txt", dtype=int, delimiter=" "))
 
 stone_lookup = {0: [1]}
 
+
 def add_stone(stone):
     stone_string = str(stone)
     if len(stone_string) % 2 == 0:
@@ -13,10 +14,11 @@ def add_stone(stone):
     else:
         stone_lookup[stone] = [stone * 2024]
 
+
 def iterate_stone(new_stones, stone, count):
     if stone not in stone_lookup:
         add_stone(stone)
-    
+
     for new_stone in stone_lookup[stone]:
         new_stones[new_stone] += count
 
@@ -27,8 +29,9 @@ def iterate_stones(stones):
         iterate_stone(new_stones, int(stone), stones[stone])
     return new_stones
 
+
 for n in range(75):
-    print(f'{n}: {sum(stones.values())}')
+    print(f"{n}: {sum(stones.values())}")
     stones = iterate_stones(stones)
 
-print(f'75: {sum(stones.values())}')
+print(f"75: {sum(stones.values())}")
