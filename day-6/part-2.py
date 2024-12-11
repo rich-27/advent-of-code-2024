@@ -1,145 +1,191 @@
 import numpy as np
+from itertools import islice
+
+directions = ["^", ">", "v", "<"]
+next_direction_lookup = dict(zip(directions, np.roll(directions, -1)))
+
+obstacles = ["#", "O"]
+
+bcolor_lookup = {
+    "p": "\033[95m",
+    "b": "\033[94m",
+    "c": "\033[96m",
+    "g": "\033[92m",
+    "y": "\033[93m",
+    "r": "\033[91m",
+    "w": "\033[0m",
+}
+
+symbol_colour_lookup_base = {".": "c", "#": "r", "O": "y", "X": "p"}
+
+symbol_colour_lookup = {
+    **symbol_colour_lookup_base,
+    **{item: "b" for item in directions},
+}
+check_path_symbol_colour_lookup = {
+    **symbol_colour_lookup_base,
+    **{item: "g" for item in directions},
+}
+
+lab_map = np.rec.fromrecords(
+    [
+        [(symbol_colour_lookup[item], item) for item in row]
+        for row in np.genfromtxt(
+            "day-6/input.txt", dtype=str, delimiter=1, comments=None
+        )
+    ],
+    dtype=[("format", "U1"), ("symbol", "U1")],
+)
+
+guard_location = np.array([indices[0] for indices in np.where(lab_map.symbol == "^")])
+
+indices = np.stack(np.indices(lab_map.shape[:2]), axis=-1)
+
+paths_lookup = {}
+checked_paths = []
 
 
-def print_map(lab_map):
-    for row in lab_map:
-        print("".join(row))
-    print()
+def print_map(lab_map, with_obstacles=False):
+    print(f"{bcolor_lookup['w']}+{''.join('-' for _ in range(lab_map.shape[1]))}+")
 
+    map_to_print = np.copy(lab_map)
 
-def get_segment(lab_map, segment_indices):
-    # print(segment_indices)
-    return lab_map[*np.split(segment_indices, 2, axis=-1)][:, 0]
-
-
-def get_next_segment(lab_map, guard_location, guard_direction):
-    indices = np.stack(np.indices(lab_map.shape), axis=-1)
-    segment_indices = np.squeeze(
-        indices[
-            *(
-                *[
-                    slice(
-                        index,
-                        index + 1 if move == 0 else None,
-                        1 if move == 0 else move,
-                    )
-                    for index, move in zip(guard_location, guard_direction[0].move)
-                ],
-                slice(None),
-            )
-        ]
-    )
-
-    segment = get_segment(lab_map, segment_indices)
-
-    are_obstacles = np.logical_or(segment == "#", segment == "O")
-    if are_obstacles.sum() == 0:
-        return (True, segment, segment_indices)
-
-    segment_indices = segment_indices[
-        : np.indices(segment.shape)[0][are_obstacles][0], :
-    ]
-    return (False, get_segment(lab_map, segment_indices), segment_indices)
-
-
-def draw_path(map_array, path_indices, guard_direction):
-    map_array[*np.split(path_indices, 2, axis=-1)] = guard_direction[0].symbol
-
-
-def get_next_direction(guard_direction):
-    return np.roll(guard_direction, -1, axis=0)
-
-
-def find_path(lab_map, guard_location, guard_direction, has_obstacle=False):
-    exits_map = False
-    while not (exits_map):
-        exits_map, path, path_indices = get_next_segment(
-            lab_map, guard_location, guard_direction
+    if with_obstacles:
+        for obstacle_location in obstacle_locations:
+            map_to_print[*obstacle_location] = symbol_colour_lookup["O"]
+    for row in map_to_print:
+        print(
+            f"{bcolor_lookup['w']}|{''.join([f'{bcolor_lookup[item.format]}{item.symbol}' for item in row])}{bcolor_lookup['w']}|"
         )
 
-        # print(
-        #     f"{lab_map.shape}, {guard_location}, {guard_direction[0].symbol}: {exits_map}, {path}, {path_indices.shape}"
-        # )
-        # print_map(lab_map)
-
-        if not exits_map and path[-1] in guard_direction[:3].symbol:
-            # if path[-1] == guard_direction[2].symbol or (
-            #     path[-1] == guard_direction[3].symbol
-            #     and lab_map[*np.add(path[-1], guard_direction[2].move)] in ["#", "O"]
-            # ):
-            # Path is looping
-            return False
-
-        draw_path(lab_map, path_indices, guard_direction)
-        guard_direction = get_next_direction(guard_direction)
-        guard_location = path_indices[-1]
-
-        if path.size > 1 and not has_obstacle:
-            is_starting_location = np.any(
-                path_indices[:-1] != guard_starting_location, axis=1
-            )
-            loop_map_starting_locations = path_indices[:-1][is_starting_location]
-            loop_map_count = is_starting_location.sum()
-            loop_maps = np.repeat(np.copy(lab_map)[:, :, None], loop_map_count, axis=2)
-            for map_index in range(loop_map_count):
-                loop_maps[
-                    *path_indices[1:][is_starting_location][map_index], map_index
-                ] = "O"
-
-            has_loop = np.logical_not(
-                [
-                    find_path(
-                        np.squeeze(loop_map),
-                        np.squeeze(start_location),
-                        guard_direction,
-                        True,
-                    )
-                    for loop_map, start_location in zip(
-                        np.split(loop_maps, loop_map_count, axis=2),
-                        np.split(
-                            path_indices[:-1][is_starting_location],
-                            loop_map_count,
-                            axis=0,
-                        ),
-                    )
-                ]
-            )
-
-            if has_loop.sum() > 0:
-                global obstacle_locations
-                obstacle_locations.append(path_indices[:-1][is_starting_location][has_loop])
-            # if has_loop.sum() > 0:
-            #     print(f'Found {has_loop.sum()} loops')
-            #     global obstacle_maps
-            #     obstacle_maps = np.append(obstacle_maps, loop_maps[:, :, has_loop], axis=2)
-
-    return True
+    print(f"{bcolor_lookup['w']}+{''.join('-' for _ in range(lab_map.shape[1]))}+")
 
 
-starting_lab_map = np.genfromtxt(
-    "day-6/input.txt", dtype=str, delimiter=1, comments=None
-)
+def get_segment_indices(location, direction):
+    match direction:
+        case "^":
+            return indices[location[0] :: -1, location[1]]
+        case ">":
+            return indices[location[0], location[1] :]
+        case "v":
+            return indices[location[0] :, location[1]]
+        case "<":
+            return indices[location[0], location[1] :: -1]
 
-guard_starting_location = np.array(
-    [indices[0] for indices in np.where(starting_lab_map == "^")]
-)
-# Guard direction is first row of array
-guard_direction = np.rec.fromrecords(
-    [
-        (direction, move)
-        for direction, move in {
-            "^": (-1, 0),
-            ">": (0, 1),
-            "v": (1, 0),
-            "<": (0, -1),
-        }.items()
-    ],
-    dtype=[("symbol", "U1"), ("move", tuple)],
-)
-# obstacle_maps = np.empty([*starting_lab_map.shape, 0])
+
+def next_segment(lab_map, location, direction):
+    segment_indices = get_segment_indices(location, direction)
+
+    segment = np.rec.fromarrays(
+        [segment_indices, lab_map[*np.unstack(segment_indices, axis=-1)].symbol],
+        dtype=[("location", "i", (2,)), ("symbol", "U1")],
+    )
+
+    exits_map = False
+    try:
+        segment = segment[: np.isin(segment.symbol, obstacles).tolist().index(True)]
+    except ValueError:
+        exits_map = True
+
+    return exits_map, segment
+
+
+def set_segment(lab_map, segment, colour_lookup):
+    lab_map[*np.unstack(segment.location, axis=-1)] = (colour_lookup[segment[0].symbol], segment[0].symbol)
+
+
+def rotate(segment):
+    segment = segment.copy()
+    segment.symbol = next_direction_lookup(segment.symbol)
+    return segment
+
+
+def check_path(lab_map, location, obstacle_check=False):
+    global paths_lookup
+    colour_lookup = (
+        symbol_colour_lookup if not obstacle_check else check_path_symbol_colour_lookup
+    )
+
+    exits_map = False
+    path = {}
+    while exits_map == False:
+        direction = lab_map[*location].symbol
+
+        step = (*(int(n) for n in location), str(direction))
+
+        if step in path:
+            # Looping
+            break
+
+        if obstacle_check:
+            try:
+                exits_map, path_suffix = paths_lookup[step]
+                path = {**path, **path_suffix}
+                break
+            except KeyError:
+                pass
+
+        exits_map, segment = next_segment(lab_map, location, direction)
+
+        path[step] = segment
+
+        if not obstacle_check:
+            for check_index in range(segment[:-1].shape[0]):
+                obstacle_location = segment[check_index + 1].location
+                if np.all(obstacle_location == guard_location):
+                    continue
+
+                check_map = lab_map.copy()
+
+                if check_index > 0:
+                    set_segment(check_map, segment[:check_index + 1], colour_lookup)
+
+                check_location = segment[check_index].location
+                symbol = check_map[*check_location].symbol
+                check_map[*check_location].format, check_map[*check_location].symbol = (
+                    colour_lookup[symbol],
+                    next_direction_lookup[symbol],
+                )
+                check_map[*obstacle_location].format, check_map[*obstacle_location].symbol = (colour_lookup["O"], "O")
+
+                check_path_loops, checked_path = check_path(
+                    check_map, check_location, True
+                )
+                if check_path_loops:
+                    # Path loops
+                    obstacle_locations.append(obstacle_location)
+
+                checked_paths.append(checked_path)
+
+                # print_map(check_map)
+                # pass
+
+        set_segment(lab_map, segment, colour_lookup)
+
+        location = segment[-1].location
+        lab_map[*location].format, lab_map[*location].symbol = (
+            (colour_lookup["X"], "X")
+            if exits_map
+            else (colour_lookup[next_direction_lookup[direction]], next_direction_lookup[direction])
+        )
+
+    for index, step in enumerate(path.keys()):
+        paths_lookup[step] = (exits_map, dict(islice(path.items(), index, None)))
+
+    return (not exits_map, path)
+
+
 obstacle_locations = []
-find_path(starting_lab_map, guard_starting_location, guard_direction)
+check_path(lab_map, guard_location)
 
-# print(np.any(obstacle_maps == "O", axis=2).sum())
-print(np.unique(np.concatenate(obstacle_locations, axis=0), axis=0).shape[0])
-print_map(starting_lab_map)
+locations_visited = np.logical_not(np.isin(lab_map.symbol, [".", "#"])).sum()
+print(locations_visited)
+
+print(len(checked_paths))
+
+lab_map[*np.unstack(np.stack(obstacle_locations, axis=0), axis=-1)] = (symbol_colour_lookup["O"], "O")
+
+print((lab_map.symbol == "O").sum())
+
+# print(np.unique(np.stack(obstacle_locations, axis=0), axis=0).shape[0])
+print_map(lab_map)
